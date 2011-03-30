@@ -4,4 +4,6 @@ Revision history for Test-HTTP-Reflector
         First version, released for fun
 
 0.02    2011-03-29 14:45
-        Renamed to Test-HTTP-Reflector
+        Renamed to Test-HTTP-Reflector, added clear method
+
+
