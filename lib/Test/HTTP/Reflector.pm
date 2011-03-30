@@ -5,6 +5,8 @@ use strict;
 use File::Path qw//;
 use File::Spec::Functions;
 use IO::Dir;
+use URI;
+use Carp;
 use Data::UUID;
 use HTTP::Headers;
 use HTTP::Response;
@@ -15,26 +17,40 @@ Test::HTTP::Reflector - Return stored posts as raw responses
 
 =head1 VERSION
 
-Version 0.01
+Version 0.02
 
 =cut
 
-our $VERSION = '0.01';
+our $VERSION = '0.02';
 
 
 =head1 SYNOPSIS
 
 Sometimes, you're doing an integration test and you need to 
 program a sequence of remote responses.  This class provides
-the engine that allows a simple daemon program (as demonstrated
-in the daemon.t test) to service such requests.
+the engine that allows a simple daemon program to service such 
+requests.
 
-Feed back previously posted data to the client
+This program feed back previously posted data to the client
 
  use Test::Integrate;
  use HTTP::Response;
  use HTTP::Headers;
- my $r = HTTP::Response->parse(Test::HTTP::Reflector->new( directory => '/aaa/', request => HTTP::Request->new(POST => '/set', {}, '404 NOT FOUND\nSpecial: DEFG\n\nABCD')));
+ # http parse <- reflector response <- reflector request <- post content <- to_string <- Test HTTP response
+ my $r = HTTP::Response->parse
+   ( Test::HTTP::Reflector->new
+     ( directory => '/aaa/'
+     , request => HTTP::Request->new
+       ( POST => '/set'
+       , {} 
+       , HTTP::Response->new
+         ( 404 => 'NOT FOUND'
+         , HTTP::Header->new('Special' => DEFG')
+         , 'ABCD'
+         )->as_string
+       )
+     )->response
+   );
  my $token = $r->headers->header('Token');
  my $rr = HTTP::Response->parse(Test::HTTP::Reflector->new( directory => '/aaa/', request => HTTP::Request->new(GET => '/'.$token)));
  is $rr->headers->header('Special'), 'DEFG'
@@ -57,10 +73,10 @@ request is the request object from the HTTP::Daemon connection.
 sub new { 
   my $class = shift;
   my %args = @_;
-  die "directory required" unless $args{directory};
+  croak "directory required" unless $args{directory};
   File::Path::mkpath $args{directory};
-  die "Unable to create directory $args{directory} $?" unless -d $args{directory};
-  die "request required" unless $args{request};
+  croak "Unable to create directory $args{directory} $?" unless -d $args{directory};
+  croak "request required" unless $args{request};
   return bless { %args }, $class;
 }
 
@@ -111,13 +127,10 @@ Expected to return an HTTP reply text stream.
 
 sub response {
   my $self = shift;
-  my $path = $self->request->uri->path;
-  my $possible_dir = catfile($self->directory, $path);
-  if (-d $possible_dir) {
-    return $self->retrieve($possible_dir);
-  } else {
-    return $self->store($possible_dir);
+  if ($self->request->method eq 'POST') {
+    return $self->store;
   }
+  return $self->retrieve;
 }
 
 =head2 retrieve
@@ -129,14 +142,13 @@ Also rotates the directory down before returning.
 
 sub retrieve {
   my $self = shift;
-  my $path = shift;
-  my $file = catfile($path, 1);
-  die "No such file to retrieve ($file)" unless -f $file;
+  my $file = catfile($self->storage, 1);
+  croak "No such file to retrieve ($file)" unless -f $file;
   my $buffer;
   my $data = '';
   my $fh = new IO::File $file;
   $data .= $buffer while read $fh, $buffer, 4028;
-  $self->rotate_down($path);
+  $self->rotate_down;
   return $data;
 }
 
@@ -150,7 +162,7 @@ removed, which requires all of the files to already be unlinked.
 
 sub rotate_down {
   my $self = shift;
-  my $dir = shift;
+  my $dir = $self->storage;
   my(@files, $file);
 
   # rename all the files down one number
@@ -164,8 +176,23 @@ sub rotate_down {
   unlink catfile($dir, 0); 
 
   # clean up the directories.  This'll fail if there are any files still in it, which is okay.
-  rmdir $dir;
-  return rmdir $self->directory;
+  rmdir $dir unless -f catfile $dir, 1;
+  rmdir $self->directory unless -d $dir;
+  return not -d $dir;
+}
+
+=head2 id
+
+accessor.  Get the id from the current request.
+
+=cut
+
+sub id {
+  my $self =shift;
+  return $self->{id} if $self->{id};
+  ($self->{id}) = $self->request->uri->path =~ /\/([a-z0-9-]+)$/i;
+  $self->{id} = $self->uuid->to_string($self->uuid->create()) unless $self->{id} and eval { $self->uuid->from_string($self->{id}); };
+  return $self->{id};
 }
 
 =head2 store
@@ -179,49 +206,109 @@ If the request doesn't make sense, it delegates it to the retrieve function
 
 sub store {
   my $self = shift;
-  my $possible_dir = shift;
-  return $self->retrieve($possible_dir) unless $self->request->method eq 'POST'; # other verb?  Can't be a store.
-  my $id;
+  return $self->retrieve($self->storage) unless $self->request->method eq 'POST'; # other verb?  Can't be a store.
   if ($self->request->uri->path =~ /^\/set/) {
-    $id = $self->uuid->to_string($self->uuid->create());
-  } elsif ($self->request->uri->path =~ /^\/add/) {
-    ($id) = $self->request->uri->path =~ /^\/add\/(.+)$/;
-    die "Unable to parse id out of add url" unless $id;
-  } elsif ($self->request->uri->path =~ /^\/clear/) {
-    ($id) = $self->request->uri->path =~ /^\/clear\/(.+)$/;
-    die "Unable to parse id out of clear url" unless $id;
-    do {} until $self->rotate_down($path);
-    return;
-  } else {
-    return $self->retrieve($possible_dir); # Retrieve takes care of 404 type errors.
+    $self->clear;
   }
-  die "don't have an id. ($id)" unless $id;
-  $self->store_by_id($id);
-  my $headers = HTTP::Headers->new;
-  $headers->header( Token => $id );
-  return HTTP::Response->new( 200, 'Stored', $headers )->as_string;
+  $self->store_in_file;
+  my $headers = HTTP::Headers->new
+    ( Token => $self->id
+    , Get => $self->get_url
+    , Add => $self->add_url
+    , Clear => $self->clear_url
+    );
+  return HTTP::Response->new( 200, 'STORED', $headers )->as_string;
 }
 
-=head2 store_by_id
+=head2 get_url
 
-operation.  Store the indicated text stream on disk in a directory named
-for the id provided.
+accessor. The url that you can use to get this token's data
 
 =cut
 
-sub store_by_id {
+sub get_url {
   my $self = shift;
-  my $id = shift;
-  my $datdirectory = catdir($self->directory, $id);
+  return URI->new_abs('/'.$self->id, $self->base_url);
+}
+
+=head2 add_url
+
+accessor. The url that you can use to add to this token's data
+
+=cut
+
+sub add_url {
+  my $self = shift;
+  return URI->new_abs('/add/'.$self->id, $self->base_url);
+}
+
+=head2 clear_url
+
+accessor. The url that you can use to clear to this token's data
+
+=cut
+
+sub clear_url {
+  my $self = shift;
+  return URI->new_abs('/clear/'.$self->id, $self->base_url);
+}
+
+=head2 base_url
+
+accessor.  The base url for this resource.
+
+=cut
+
+sub base_url {
+  my $self = shift;
+  my $uri = URI->new_abs('/', $self->request->uri );
+  $uri->scheme( 'http' );
+  $uri->host( $self->request->header('host') );
+  return $uri->clone;
+}
+
+=head2 storage
+
+accessor.  The full file storage path for the current file
+
+=cut
+
+sub storage {
+  my $self = shift;
+  return catfile($self->directory, $self->id);
+}
+
+=head2 clear
+
+operation.  delete all the entries for the token specified.
+
+=cut
+
+sub clear {
+  my $self = shift;
+  my $count = 0;
+  do { last if $count ++ > 100000 } until $self->rotate_down($self->storage);
+}
+
+=head2 store_in_file
+
+operation.  Store the indicated text stream on disk in a directory named
+for the token
+
+=cut
+
+sub store_in_file {
+  my $self = shift;
+  my $datdirectory = $self->storage;
   File::Path::mkpath $datdirectory;
-  die "Unable to create directory $datdirectory $?" unless -d $datdirectory;
+  croak "Unable to create directory $datdirectory $?" unless -d $datdirectory;
   my $file;
   my $count = 1;
   do {
     $file = catfile($datdirectory, $count ++);
-  } until (! -e $file);
+  } while (-e $file);
   my $ofile = IO::File->new($file, 'w');
-  die "Unable to open file $file" unless $ofile;
+  croak "Unable to open file $file" unless $ofile;
   $ofile->print( $self->request->content ); 
   $ofile->close;
 }

@@ -1,5 +1,7 @@
-Revision history for Test-REST-Integrate
+Revision history for Test-HTTP-Reflector
 
 0.01    2011-03-25 20:00
         First version, released for fun
 
+0.02    2011-03-29 14:45
+        Renamed to Test-HTTP-Reflector

@@ -1,24 +1,41 @@
-#!perl
+#!/usr/bin/perl
 
 use HTTP::Daemon;
 use HTTP::Status;
 use Getopt::Long;
 use File::Path;
+use Getopt::Long::Descriptive;
 use English;
+use Test::HTTP::Reflector;
     
+my ($opt, $usage) = describe_options(
+    'httpreflect %o <some-arg>',
+    [ 'directory|d=s', "the directory to store files in", { default => '/tmp/httpreflector' } ],
+    [ 'localaddr|l=s', "the address to listen on", { default => '127.0.0.1' } ],
+    [ 'localport|p=i',   "the port to listen on", { default => 8082 } ],
+    [],
+    [ 'help',       "print usage message and exit" ],
+  );
+
+print($usage->text), exit if $opt->help;
+
+daemon( $opt->directory, $opt->localaddr, $opt->localport );
+
 sub daemon {
     my $directory = shift;
+    my $addr = shift;
+    my $port = shift;
 
     mkpath $directory;
     die "Unable to create directory ($directory) $?" unless -d $directory;
 
-    my $d = HTTP::Daemon->new( );
+    my $d = HTTP::Daemon->new( LocalAddr => $addr, LocalPort => $port );
     die "Unable to listen $@ $? $!" unless $d;
 
-    if (my $pid = fork) {
-        return ($d->sockport, $pid);
-    }
+    print "Listening address $addr port $port storing in $directory\n";
+
     while (my $c = $d->accept) {
+        next unless fork;
         while (my $r = $c->get_request) {
             eval { $c->send_response(Test::HTTP::Reflector->new( directory => $directory, request => $r)->response); };
             if ($EVAL_ERROR) {
@@ -28,6 +45,8 @@ sub daemon {
         $c->close;
         undef($c);
     }
+
+    print "No more accept.\n";
 
 }
 

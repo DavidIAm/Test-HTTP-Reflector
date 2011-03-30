@@ -1,9 +1,16 @@
-Test-REST-Integrate
+Test-HTTP-Reflector
 
-Just install with cpanminus and you'll be fine.  There are no machine
-dependencies.
+You are doing another integration project, but the other end isn't available.
+How can you test the integration with their API?
 
+How do you test your code from bottom to top to make sure its integration works
+as desired?
 
+Simulator pattern to the rescue.  Usually, you write a small program that stands
+in for the unavailable integration partner and responds exactly how that partner
+is expected to respond.
+
+This module helps you create that program - and provides one called httpreflector.
 
 INSTALLATION
 
@@ -19,21 +26,25 @@ SUPPORT AND DOCUMENTATION
 After installing, you can find documentation for this module with the
 perldoc command.
 
-    perldoc Test::REST::Integrate
+    perldoc Test::HTTP::Reflector
+
+For the httpreflect program, simply do
+
+    httpreflect --help
 
 You can also look for information at:
 
     RT, CPAN's request tracker
-        http://rt.cpan.org/NoAuth/Bugs.html?Dist=Test-REST-Integrate
+        http://rt.cpan.org/NoAuth/Bugs.html?Dist=Test-HTTP-Reflector
 
     AnnoCPAN, Annotated CPAN documentation
-        http://annocpan.org/dist/Test-REST-Integrate
+        http://annocpan.org/dist/Test-HTTP-Reflector/
 
     CPAN Ratings
-        http://cpanratings.perl.org/d/Test-REST-Integrate
+        http://cpanratings.perl.org/d/Test-HTTP-Reflector
 
     Search CPAN
-        http://search.cpan.org/dist/Test-REST-Integrate/
+        http://search.cpan.org/dist/Test-HTTP-Reflector/
 
 
 LICENSE AND COPYRIGHT

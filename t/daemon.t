@@ -1,14 +1,15 @@
-#!perl 
+#!/usr/bin/perl
 
 use LWP::UserAgent;
 use HTTP::Headers;
 use HTTP::Request;
 use Test::Most tests => 7;
 use Carp::Always;
-use Test::REST::Integrate;
+use Test::HTTP::Reflector;
+use URI;
 
 my $ua = new LWP::UserAgent;
-my ($port, $pid) = daemon('./Test-REST-Integrate-Data');
+my ($port, $pid) = daemon('./Test-HTTP-Reflector-Data');
 
 END {
   kill 9, $pid;
@@ -16,7 +17,6 @@ END {
 
 my $token;
 my $content;
-my $url;
 my $response;
 
 
@@ -28,14 +28,17 @@ Content-length: 20
 12345678901234567890
 ";
 
-ok +$response = $ua->request( HTTP::Request->new(POST => 'http://localhost:'.$port.'/set/', HTTP::Headers->new, $content ) ), 'got response';
+my $seturi = URI->new( 'http://localhost/set/' );
+$seturi->port($port);
+
+ok +$response = $ua->request( HTTP::Request->new(POST => $seturi, HTTP::Headers->new, $content ) ), 'got response';
 
 ok +$token = $response->header('token'), 'got token';
 
-$url ='http://localhost:'.$port.'/'.$token;
+my $geturi = $seturi->new_abs('/'.$token, $seturi);
+$geturi ='http://localhost:'.$port.'/'.$token;
 
-ok +$ua->get($url)->header('Header'), 'Set like this';
-
+ok +$ua->get($geturi)->header('Header'), 'Set like this';
 
 $content = "200 OK
 Header: Set like this
@@ -44,8 +47,8 @@ Content-length: 20
 
 12345678901234567890
 ";
-ok +$token = $ua->request( HTTP::Request->new(POST => 'http://localhost:'.$port.'/set/', HTTP::Headers->new, $content ) )->header('Token'), 'got token';
-$url ='http://localhost:'.$port.'/'.$token;
+ok +$token = $ua->request( HTTP::Request->new(POST => $seturi, HTTP::Headers->new, $content ) )->header('Token'), 'got token';
+$geturi = $seturi->new_abs('/'.$token, $seturi);
 
 $content = HTTP::Response->new( 404 => 'NOT FOUND', HTTP::Headers->new( 'Content-type' => 'text-plain', 'Content-length' => 9 , 'Not Found') )->as_string;
 
@@ -59,8 +62,8 @@ my $r = $ua->request
   
 ok $r->is_success, 'add returns success';
 
-is +$ua->get($url)->status_line, '200 OK', 'first response';
-is +$ua->get($url)->status_line, '404 NOT FOUND', 'second response';
+is +$ua->get($geturi)->status_line, '200 OK', 'first response';
+is +$ua->get($geturi)->status_line, '404 NOT FOUND', 'second response';
 
 
 sub daemon {
@@ -83,7 +86,7 @@ sub daemon {
     }
     while (my $c = $d->accept) {
         while (my $r = $c->get_request) {
-            eval { $c->send_response(Test::REST::Integrate->new( directory => $directory, request => $r)->response); };
+            eval { $c->send_response(Test::HTTP::Reflector->new( directory => $directory, request => $r)->response); };
             if ($EVAL_ERROR) {
                 $c->send_error(RC_FORBIDDEN, $EVAL_ERROR)
             }

@@ -3,10 +3,10 @@ use warnings;
 use ExtUtils::MakeMaker;
 
 WriteMakefile(
-    NAME                => 'Test::REST::Integrate',
+    NAME                => 'Test::HTTP::Reflector',
     AUTHOR              => q{David Ihnen <davidihnen@gmail.com>},
-    VERSION_FROM        => 'lib/Test/REST/Integrate.pm',
-    ABSTRACT_FROM       => 'lib/Test/REST/Integrate.pm',
+    VERSION_FROM        => 'lib/Test/HTTP/Reflector.pm',
+    ABSTRACT_FROM       => 'lib/Test/HTTP/Reflector.pm',
     ($ExtUtils::MakeMaker::VERSION >= 6.3002
       ? ('LICENSE'=> 'perl')
       : ()),
@@ -15,5 +15,5 @@ WriteMakefile(
         'Test::More' => 0,
     },
     dist                => { COMPRESS => 'gzip -9f', SUFFIX => 'gz', },
-    clean               => { FILES => 'Test-REST-Integrate-*' },
+    clean               => { FILES => 'Test-HTTP-Reflector-*' },
 );

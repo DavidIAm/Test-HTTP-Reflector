@@ -3,8 +3,8 @@
 use Test::More tests => 1;
 
 BEGIN {
-    use_ok( 'Test::REST::Integrate' ) || print "Bail out!
+    use_ok( 'Test::HTTP::Reflector' ) || print "Bail out!
 ";
 }
 
-diag( "Testing Test::REST::Integrate $Test::REST::Integrate::VERSION, Perl $], $^X" );
+diag( "Testing Test::HTTP::Reflector $Test::HTTP::Reflector::VERSION, Perl $], $^X" );

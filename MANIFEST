@@ -2,10 +2,10 @@ Changes
 MANIFEST
 Makefile.PL
 README
-lib/Test/REST/Integrate.pm
+lib/Test/HTTP/Reflector.pm
 t/00-load.t
 t/manifest.t
 t/pod-coverage.t
 t/pod.t
 t/daemon.t
-t/Test-REST-Integrate.t
+t/Test-HTTP-Reflector.t
