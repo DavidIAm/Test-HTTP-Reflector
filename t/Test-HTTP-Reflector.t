@@ -1,6 +1,6 @@
 #!perl
 
-use Test::More tests => 12;
+use Test::More tests => 18;
 use Test::Exception;
 use HTTP::Response;
 use HTTP::Headers;
@@ -9,7 +9,37 @@ use Test::HTTP::Reflector 'Integrate.pm';
 use URI;
 
 my $dir = '/tmp/testintegrates';
+system 'rm -r ' .$dir;
 
+throws_ok { Test::HTTP::Reflector->new } qr/directory required/i; 
+open FILE, '>'. $dir; close FILE;
+throws_ok { Test::HTTP::Reflector->new(directory => $dir) } qr/unable to create directory/i; 
+unlink $dir;
+throws_ok { Test::HTTP::Reflector->new(directory => $dir) } qr/request required/i; 
+isa_ok +Test::HTTP::Reflector->new(directory => $dir, request => HTTP::Request->new), 'Test::HTTP::Reflector';
+
+lives_ok { $r = HTTP::Response->parse
+  ( Test::HTTP::Reflector->new
+    ( directory => $dir
+    , request => HTTP::Request->new
+      ( POST => '/set'
+      , HTTP::Headers->new
+      , "200 OK\n\n"
+      )
+    )->response
+  ); }, 'bad uid path';
+  
+throws_ok { $r = HTTP::Response->parse
+  ( Test::HTTP::Reflector->new
+    ( directory => $dir
+    , request => HTTP::Request->new
+      ( POST => '/notauid'
+      , HTTP::Headers->new
+      , "200 OK\n\n"
+      )
+    )->response
+  ); } qr/No such file/i, 'post a reflect';
+  
 my $r;
 lives_ok { $r = HTTP::Response->parse
   ( Test::HTTP::Reflector->new
@@ -90,5 +120,4 @@ throws_ok { HTTP::Response->parse
 
 
 
-system 'rm -r /tmp/integratetest';
-
+system 'rm -r ' .$dir;

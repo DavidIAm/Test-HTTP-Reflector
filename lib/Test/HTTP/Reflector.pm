@@ -74,7 +74,7 @@ sub new {
   my $class = shift;
   my %args = @_;
   croak "directory required" unless $args{directory};
-  File::Path::mkpath $args{directory};
+  eval { File::Path::mkpath $args{directory} };
   croak "Unable to create directory $args{directory} $?" unless -d $args{directory};
   croak "request required" unless $args{request};
   return bless { %args }, $class;
@@ -128,7 +128,8 @@ Expected to return an HTTP reply text stream.
 sub response {
   my $self = shift;
   if ($self->request->method eq 'POST') {
-    return $self->store;
+    $self->clear if $self->request->uri->path =~ /^\/(set)/i;
+    return $self->store if $self->request->uri->path =~ /^\/(set|add\/)/i;
   }
   return $self->retrieve;
 }
@@ -200,16 +201,10 @@ sub id {
 operation.  Store the indicated text stream on disk.  Creates a UUID for set commands.
 Returns an HTTP success response with a Token header.
 
-If the request doesn't make sense, it delegates it to the retrieve function
-
 =cut
 
 sub store {
   my $self = shift;
-  return $self->retrieve($self->storage) unless $self->request->method eq 'POST'; # other verb?  Can't be a store.
-  if ($self->request->uri->path =~ /^\/set/) {
-    $self->clear;
-  }
   $self->store_in_file;
   my $headers = HTTP::Headers->new
     ( Token => $self->id
