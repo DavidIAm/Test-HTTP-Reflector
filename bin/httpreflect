@@ -1,0 +1,33 @@
+#!perl
+
+use HTTP::Daemon;
+use HTTP::Status;
+use Getopt::Long;
+use File::Path;
+use English;
+    
+sub daemon {
+    my $directory = shift;
+
+    mkpath $directory;
+    die "Unable to create directory ($directory) $?" unless -d $directory;
+
+    my $d = HTTP::Daemon->new( );
+    die "Unable to listen $@ $? $!" unless $d;
+
+    if (my $pid = fork) {
+        return ($d->sockport, $pid);
+    }
+    while (my $c = $d->accept) {
+        while (my $r = $c->get_request) {
+            eval { $c->send_response(Test::HTTP::Reflector->new( directory => $directory, request => $r)->response); };
+            if ($EVAL_ERROR) {
+                $c->send_error(RC_FORBIDDEN, $EVAL_ERROR)
+            }
+        }
+        $c->close;
+        undef($c);
+    }
+
+}
+
